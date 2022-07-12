@@ -9,10 +9,28 @@
 namespace Piwik\Plugins\CustomSiteId;
 use Piwik\Db;
 use Piwik\Common;
+use Piwik\CacheId;
+use Piwik\Cache as PiwikCache;
 use Piwik\Plugin\SettingsProvider;
 
 class CustomSiteId extends \Piwik\Plugin
 {
+    /**
+     * local site id cache
+     */
+    protected $siteIdCache = array();
+
+    /**
+     * eager site id cache (redis). Plugin base class already has a cache, but it's private.
+     */
+    private $_cache;
+
+    public function __construct($pluginName = false)
+    {
+        parent::__construct($pluginName);
+        $this->_cache = PiwikCache::getEagerCache();
+    }
+
     public function registerEvents()
     {
         return [
@@ -42,33 +60,50 @@ class CustomSiteId extends \Piwik\Plugin
       }
     }
 
-    // convert custom site id back to idSite and if using numeric id
-    public function convertSiteId(&$idSite, $params)
-    {
-      try {
-        $sql = "SELECT idsite from `" . Common::prefixTable("site_setting") . "`
-               where setting_name = ? and setting_value = ?";
-        $siteId = Db::fetchOne($sql, array('custom_site_id', $params['idsite']));
-        if (is_numeric($siteId)) {
-          $idSite = intval($siteId);
+    // convert custom site id to idSite if needed
+    public function convertSiteId(&$idSite, $params){
+        // check if the site id is a custom site id
+        if ($idSite > 0 || !isset($params['idsite'])) {
+            return;
         }
-        else if (is_numeric($idSite)) {
-          $sql = "SELECT setting_value from `" . Common::prefixTable("site_setting") . "`
-               where setting_name = ? and idsite = ?";
-          $customSiteIdValue = Db::fetchOne($sql, array('custom_site_id', $params['idsite']));
-          if ($customSiteIdValue) {
-            throw Exception('Invalid CustomSiteId');
-          }
-        }
-        else {
-            throw Exception('Invalid siteId');          
+
+        $cacheKey = 'CustomSiteId-'.$params['idsite'];
+        // check if the site id is already in the local cache
+        if(isset($this->siteIdCache[$cacheKey])){
+            $idSite = $this->siteIdCache[$cacheKey];
+            return;
         }
         
-      } catch (Exception $e) {
-        // ignore column already exists error
-        if (!Db::get()->isErrNo($e, '1060')) {
-            throw $e;
+        $data = null;
+        // check if the site id is in the eager cache (redis)
+        if ($this->_cache->contains($cacheKey)) {
+            $data = $this->_cache->fetch($cacheKey);
+        } 
+
+        if (!$data){
+            // retrieve the site id from the database
+            $data = $this->readSiteId($params['idsite']);
+            // update caches
+            $this->_cache->save($cacheKey, $data);
+            $this->siteIdCache[$cacheKey] = $data;
         }
-      }
+
+        // set the site id
+        $idSite = $data;
+    }
+
+    protected function readSiteId($customSiteId)
+    {
+        $sql = "SELECT idsite from `" . Common::prefixTable("site_setting") . "`
+                where setting_name = ? and setting_value = ?";
+        $siteId = Db::fetchOne($sql, array('custom_site_id', $customSiteId));
+        if(empty($siteId)){
+            // send the error to handler.onException
+            throw new Exception("Custom site id $customSiteId not found");
+        }
+        if (is_numeric($siteId)) {
+            $siteId = intval($siteId);
+        }
+        return $siteId;
     }
 }
