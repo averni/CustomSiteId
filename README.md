@@ -6,9 +6,9 @@ This experimental plugin allows the administrator to define a custom site id tha
 
 It comes with a command line tool to set a custom site id via console. Ex:
 
-`shell
+```shell
 php ./console customsiteid:set --name=example.com --custom-site-id=my-custom-site-id
-`
+```
 
 
 ## Warning
