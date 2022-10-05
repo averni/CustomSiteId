@@ -4,11 +4,13 @@
 
 This experimental plugin allows the administrator to define a custom site id that can be used instead of the default numeric one, useful in auto provisioning/orchestrated scenarios when combined with the awesome [ExtraTools](https://github.com/digitalist-se/extratools) plugin (which is required for this plugin to work). 
 
-It comes with a command line tool to set a custom site id via console. Ex:
+It comes with a command line tool to set or get a custom site id via console. Ex:
 
-```shell
+`
 php ./console customsiteid:set --name=example.com --custom-site-id=my-custom-site-id
-```
+
+php ./console customsiteid:get --custom-site-id=my-custom-site-id
+`
 
 
 ## Warning
