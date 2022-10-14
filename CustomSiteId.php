@@ -99,7 +99,7 @@ class CustomSiteId extends \Piwik\Plugin
         $siteId = Db::fetchOne($sql, array('custom_site_id', $customSiteId));
         if(empty($siteId)){
             // send the error to handler.onException
-            throw new Exception("Custom site id $customSiteId not found");
+            throw new \Exception("Custom site id $customSiteId not found");
         }
         if (is_numeric($siteId)) {
             $siteId = intval($siteId);
