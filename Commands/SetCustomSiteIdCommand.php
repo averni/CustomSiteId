@@ -67,7 +67,7 @@ To run:
 
     protected function alreadyExists($siteId)
     {
-        $stmt = Db::get()->query("SELECT * FROM `".Common::prefixTable('site_setting')."` WHERE plugin_name = ? and idsite_setting = ?", array('CustomSiteId', $siteId));
+        $stmt = Db::get()->query("SELECT * FROM `".Common::prefixTable('site_setting')."` WHERE plugin_name = ? and idsite = ?", array('CustomSiteId', $siteId));
         $row = $stmt->fetch();
         if ($row) {
             return true;
