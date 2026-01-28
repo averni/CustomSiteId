@@ -37,6 +37,13 @@ To run:
                     'custom-site-id',
                     null,
                     InputOption::VALUE_REQUIRED,
+                    'CustomSideId for the site',
+                    null
+                ),
+                new InputOption(
+                    'url',
+                    null,
+                    InputOption::VALUE_REQUIRED,
                     'URL for the site',
                     null
                 ),
@@ -53,7 +60,6 @@ To run:
 
     protected function getSiteIdByName($name)
     {
-        
         $list = new Site(null);
         $sites = $list->list();
 
@@ -67,51 +73,47 @@ To run:
 
     protected function alreadyExists($siteId)
     {
-        $stmt = Db::get()->query("SELECT * FROM `".Common::prefixTable('site_setting')."` WHERE plugin_name = ? and idsite = ?", array('CustomSiteId', $siteId));
-        $row = $stmt->fetch();
-        if ($row) {
-            return true;
+        try {
+            $stmt = Db::get()->query("SELECT * FROM `".Common::prefixTable('site_setting')."` WHERE plugin_name = ? and idsite = ?", array('CustomSiteId', $siteId));
+            $row = $stmt->fetch();
+            return (bool)$row;
+        } catch (\Exception $e) {
+            // If the table doesn't exist or query fails, treat as no existing setting
+            return false;
         }
-        return false;
     }
 
     /**
-     * Execute the command like: ./console customsiteid:set
+     * Matomo 5+ compatibility: ConsoleCommand::execute() is final and delegates to doExecute().
+     * Implement doExecute() instead of overriding execute() to avoid fatal errors.
+     *
+     * Return one of the class constants SUCCESS or FAILURE.
      */
-    protected function execute(InputInterface $input, OutputInterface $output)
+    protected function doExecute(): int
     {
+        $input = $this->getInput();
+        $output = $this->getOutput();
+        
         $siteName = $input->getOption('name');
         $customSiteId = $input->getOption('custom-site-id');
         $trimmedCustomSiteId = trim($customSiteId);
         $siteId = $this->getSiteIdByName($siteName);
         if (!$siteId) {
             $output->writeln("<error>Site not found</error>");
-            return;
+            return self::FAILURE;
         }
-        
+
         $alreadyExists = $this->alreadyExists($siteId);
-        
-        if ($alreadyExists) {
-            if (!$input->getOption('force')) {
-                $output->writeln("<error>Custom site id already exists</error>");
-                return;
-            }
+        if ($alreadyExists && !$input->getOption('force')) {
+            $output->writeln("<error>Site already has a custom site id. Use --force to overwrite.</error>");
+            return self::FAILURE;
         }
-        $output->writeln("<info>Setting custom site id to $customSiteId for site id $siteId</info>");
 
-        $settingsTableName = Common::prefixTable('site_setting');
+        $settings = new \Piwik\Plugins\CustomSiteId\MeasurableSettings($siteId);
+        $settings->customSiteId->setValue($trimmedCustomSiteId);
+        $settings->save();
 
-        try {
-            if ($alreadyExists) {
-                Db::query("UPDATE `$settingsTableName` SET setting_value = ? WHERE plugin_name = ? and setting_name = ? and idsite = ?", array($trimmedCustomSiteId, 'CustomSiteId', 'custom_site_id', $siteId));
-            } else {
-                Db::query("INSERT INTO `$settingsTableName` (idsite, plugin_name, setting_name, setting_value, json_encoded) VALUES (?, ?, ?, ?, 0)", array($siteId, 'CustomSiteId', 'custom_site_id',  $trimmedCustomSiteId));
-            }
-            $output->writeln("<info>Custom site id added</info>");
-            return true;
-        } catch (\Exception $e) {
-            $output->writeln("<error>Error: " . $e->getMessage() . "</error>");
-            return false;
-        }
+        $output->writeln("<info>Custom site id '$trimmedCustomSiteId' set for site '$siteName'</info>");
+        return self::SUCCESS;
     }
 }

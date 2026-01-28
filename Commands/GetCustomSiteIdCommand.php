@@ -39,7 +39,6 @@ To run:
 
     protected function getSiteIdByName($name)
     {
-        
         $list = new Site(null);
         $sites = $list->list();
 
@@ -53,32 +52,49 @@ To run:
 
     protected function alreadyExists($customSiteId)
     {
-        $stmt = Db::get()->query("SELECT * FROM `".Common::prefixTable('site_setting')."` WHERE plugin_name = ? and setting_name = ? and setting_value = ?", array('CustomSiteId', 'custom_site_id', $customSiteId));
-        $row = $stmt->fetch();
-        if ($row) {
-            return true;
+        try {
+            $stmt = Db::get()->query("SELECT * FROM `".Common::prefixTable('site_setting')."` WHERE plugin_name = ? and setting_name = ? and setting_value = ?", array('CustomSiteId', 'custom_site_id', $customSiteId));
+            $row = $stmt->fetch();
+            return (bool)$row;
+        } catch (\Exception $e) {
+            return false;
         }
-        return false;
     }
 
     /**
-     * Execute the command like: ./console customsiteid:set
+     * Matomo 5+ compatibility: ConsoleCommand::execute() is final and delegates to doExecute().
+     * Implement doExecute() instead of overriding execute() to avoid fatal errors.
+     *
+     * Return one of the class constants SUCCESS or FAILURE.
      */
-    protected function execute(InputInterface $input, OutputInterface $output)
+    protected function doExecute(): int
     {
+        $input = $this->getInput();
+        $output = $this->getOutput();
+
         $customSiteId = $input->getOption('custom-site-id');
         $trimmedCustomSiteId = trim($customSiteId);
 
         $alreadyExists = $this->alreadyExists($customSiteId);
-        
+
         if (!$alreadyExists) {
             $output->writeln("<error>Custom site id $customSiteId does not exist.</error>");
-            return;
+            return self::FAILURE;
         }
 
-        $stmt = Db::get()->query("SELECT idsite FROM `".Common::prefixTable('site_setting')."` WHERE plugin_name = ? and setting_name = ? and setting_value = ?", array('CustomSiteId', 'custom_site_id', $customSiteId));
-        $row = $stmt->fetch();
-        $output->writeln($row['idsite']);
-        return;
+        try {
+            $stmt = Db::get()->query("SELECT idsite FROM `".Common::prefixTable('site_setting')."` WHERE plugin_name = ? and setting_name = ? and setting_value = ?", array('CustomSiteId', 'custom_site_id', $customSiteId));
+            $row = $stmt->fetch();
+            if ($row && isset($row['idsite'])) {
+                $output->writeln($row['idsite']);
+                return self::SUCCESS;
+            } else {
+                $output->writeln("<error>Custom site id $customSiteId not found.</error>");
+                return self::FAILURE;
+            }
+        } catch (\Exception $e) {
+            $output->writeln("<error>Error: " . $e->getMessage() . "</error>");
+            return self::FAILURE;
+        }
     }
 }

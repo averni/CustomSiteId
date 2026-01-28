@@ -34,19 +34,19 @@ class CustomSiteId extends \Piwik\Plugin
     public function registerEvents()
     {
         return [
-            'SitesManager.getImageTrackingCode' => 'updateImageUrl',
-            'Tracker.getJavascriptCode' => 'updateJavascriptCode',
-            'Tracker.Request.getIdSite' => 'convertSiteId',
+            'Template.imageTrackingCode' => 'updateImageUrl',
+            'Template.javascriptTracker' => 'updateJavascriptCode',
+            'Tracker.getIdSite' => 'convertSiteId',
         ];
     }
 
     // modify the generated javascript code with the custom site Id
-    public function updateJavascriptCode(&$codeImpl, $parameters)
+    public function updateJavascriptCode(&$js, $idSite, $site)
     {
-      $settings = new MeasurableSettings($codeImpl['idSite']);
+      $settings = new MeasurableSettings($idSite);
       $customSiteId = $settings->customSiteId->getValue();
       if ($customSiteId) {
-        $codeImpl['idSite'] = $customSiteId;
+        $js = str_replace("'setSiteId', '" . $idSite . "'", "'setSiteId', '" . $customSiteId . "'", $js);
       }
     }
 
@@ -61,13 +61,18 @@ class CustomSiteId extends \Piwik\Plugin
     }
 
     // convert custom site id to idSite if needed
-    public function convertSiteId(&$idSite, $params){
+    public function convertSiteId(&$idSite, $request){
         // check if the site id is a custom site id
-        if ($idSite > 0 || !isset($params['idsite'])) {
+        if ($idSite > 0) {
             return;
         }
 
-        $cacheKey = 'CustomSiteId-'.$params['idsite'];
+        $customSiteId = $request->getParam('idsite');
+        if (empty($customSiteId)) {
+            return;
+        }
+
+        $cacheKey = 'CustomSiteId-'.$customSiteId;
         // check if the site id is already in the local cache
         if(isset($this->siteIdCache[$cacheKey])){
             $idSite = $this->siteIdCache[$cacheKey];
@@ -82,7 +87,7 @@ class CustomSiteId extends \Piwik\Plugin
 
         if (!$data){
             // retrieve the site id from the database
-            $data = $this->readSiteId($params['idsite']);
+            $data = $this->readSiteId($customSiteId);
             // update caches
             $this->_cache->save($cacheKey, $data);
             $this->siteIdCache[$cacheKey] = $data;
@@ -98,11 +103,7 @@ class CustomSiteId extends \Piwik\Plugin
                 where setting_name = ? and setting_value = ?";
         $siteId = Db::fetchOne($sql, array('custom_site_id', $customSiteId));
         if(empty($siteId)){
-            // send the error to handler.onException
-            throw new \Exception("Custom site id $customSiteId not found");
-        }
-        if (is_numeric($siteId)) {
-            $siteId = intval($siteId);
+            return 0;
         }
         return $siteId;
     }
